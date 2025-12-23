@@ -202,7 +202,7 @@ class SatelliteDataWorkerBalanced:
         bbox = tuple(task['bbox'])
 
         # mapping binario dal master (EuroCrops -> {0,1})
-        binary_classes = task.get('binary_classes', self.binary_classes_default)
+        binary_classes = task.get('binary_classes', self.binary_classes)
 
         logger.info(f"[Worker {self.worker_id}] Processing task {task_id}: {bbox}")
 
