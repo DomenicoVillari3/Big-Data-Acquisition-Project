@@ -21,27 +21,18 @@ class SatelliteDataMasterBalanced:
         self.gpkg_path = "/export/mimmo/es_2023_all.gpkg"
         
        
-        # Mappatura classi
-        self.target_classes = {
-            'olive_plantations': 1,
-            'vineyards_wine_vine_rebland_grapes': 2,
-            'citrus_plantations': 3, 'fruit_temperate_climate': 3,
-            'fruit_subtropical_climate': 3,
-            'almond': 4, 'orchards_fruits': 4, 'tree_wood_forest': 4,
-            'other_tree_wood_forest': 4,
-            'durum_hard_wheat': 5, 'common_soft_wheat': 5, 'barley': 5,
-            'oats': 5, 'triticale': 5,
-            'broad_beans_horse_beans': 6, 'chickpeas': 6, 'peas': 6,
-            'lentils': 6, 'vetches': 6,
-            'tomato': 7, 'melons': 7, 'watermelon': 7, 'potatoes': 7,
-            'vegetables_fresh': 7,
-            'fallow_land_not_crop': 8, 'bare_arable_land': 8
-        }
-    
+         # MAPPATURA DIRETTA BINARIA: EuroCrops -> CROP(1) / NON-CROP(0)
+        with open("classes_mapping.json") as f:
+            self.binary_classes = dict(json.load(f))
+        
+        logger.info(f"Loaded {len(self.binary_classes)} classes from JSON")
+
+            
+
+        
    
-    
     def generate_tasks_from_spain(self):
-        """Genera task per tutta la Spagna - COME CODICE ORIGINALE"""
+        """Genera task per tutta la Spagna """
         logger.info(f"Reading GPKG: {self.gpkg_path}")
         
         # Leggi solo metadata
@@ -63,14 +54,20 @@ class SatelliteDataMasterBalanced:
         # Griglia 0.1° (~5km)
         grid_step = 0.05
         
+        #lista di coordinate da scorrere
         x_ranges = np.arange(start_x, end_x, grid_step)
         y_ranges = np.arange(start_y, end_y, grid_step)
         
+
         total_cells = len(x_ranges) * len(y_ranges)
         logger.info(f"Grid: {len(x_ranges)}×{len(y_ranges)} = {total_cells} cells")
         
         tasks = []
         task_id = 0
+
+        #statistiche globali 
+        total_crop=0
+        total_noncrop=0
         
         # Itera sulla griglia
         for i, x in enumerate(x_ranges):
@@ -87,44 +84,86 @@ class SatelliteDataMasterBalanced:
                         continue
                     
                     # Mappa classi
-                    local_gdf['label_id'] = local_gdf['EC_hcat_n'].map(
-                        self.target_classes
+                    local_gdf['binary_id'] = local_gdf['EC_hcat_n'].map(
+                        self.binary_classes
                     )
-                    target_polys = local_gdf.dropna(subset=['label_id'])
+                    #i poligoni target sono solo quelli con binary id definito 
+                    target_polys = local_gdf.dropna(subset=['binary_id'])
                     
                     if len(target_polys) == 0:
                         continue
                     
                     # Conta per classe
-                    class_counts = target_polys['label_id'].value_counts().to_dict()
+                    binary_counts = target_polys['binary_id'].value_counts().to_dict()
+                    crop_count = binary_counts.get(1, 0)
+                    noncrop_count = binary_counts.get(0, 0)
+
+                    # Aggiorna statistiche globali
+                    total_crop += crop_count
+                    total_noncrop += noncrop_count
                     
-                    # Log ogni 50 task
-                    if task_id % 50 == 0 and task_id > 0:
-                        logger.info(f"Generated {task_id} tasks...")
+                    # Log progress ogni 100 task
+                    if task_id % 100 == 0 and task_id > 0:
+                        ratio = total_crop / max(total_noncrop, 1)
+                        logger.info(
+                            f"Task {task_id} | "
+                            f"CROP: {total_crop:,} | NON-CROP: {total_noncrop:,} | "
+                            f"Ratio: {ratio:.1f}:1"
+                        )
                     
+
                     # Crea task
                     task = {
                         'task_id': task_id,
-                        'bbox': cell_bbox,  # Stesso CRS del GPKG!
+                        'bbox': cell_bbox,
                         'grid_step': grid_step,
-                        'polygon_count': len(target_polys), 
-                        'class_distribution': class_counts,
+                        'polygon_count': len(target_polys),
+                        'binary_distribution': {
+                            'crop': crop_count,
+                            'non_crop': noncrop_count
+                        },
+
+                        'binary_classes': self.binary_classes
                     }
                     tasks.append(task)
                     task_id += 1
                     
                 except Exception as e:
                     # Solo debug per primi errori
-                    if task_id < 5:
+                    if task_id < 3:
                         logger.debug(f"Error reading cell {cell_bbox}: {e}")
                     continue
+
+        # STATISTICHE FINALI
+        logger.info("\n" + "="*60)
+        logger.info("DATASET STATISTICS")
+        logger.info("="*60)
+        logger.info(f"Total tasks generated: {len(tasks)} (from {total_cells} cells)")
+        logger.info(f"Total polygons: {total_crop + total_noncrop:,}")
+        logger.info(f"CROP polygons: {total_crop:,} ({total_crop/(total_crop+total_noncrop)*100:.1f}%)")
+        logger.info(f"NON-CROP polygons: {total_noncrop:,} ({total_noncrop/(total_crop+total_noncrop)*100:.1f}%)")
+        
+        if total_noncrop > 0:
+            balance_ratio = total_crop / total_noncrop
+            logger.info(f"Imbalance Ratio: {balance_ratio:.2f}:1")
+            
+            if balance_ratio > 5:
+                logger.warning(
+                    f"\n  IMBALANCED DATASET!\n"
+                    f"Spark recommendation: Use class_weight={{0: {balance_ratio:.1f}, 1: 1.0}}"
+                )
+        logger.info("="*60 + "\n")
         
         logger.info(f"Total tasks generated: {len(tasks)} from {total_cells} cells")
         return tasks
     
+
+
+
+    
     def publish_tasks(self, tasks):
         """Pubblica i task su Kafka"""
-        logger.info(f"Publishing {len(tasks)} tasks to Kafka...")
+        logger.info(f"Publishing {len(tasks)} tasks to Kafka topic {self.topic}...")
         
         for task in tasks:
             self.producer.send(
@@ -139,10 +178,14 @@ class SatelliteDataMasterBalanced:
         self.producer.flush()
         logger.info(f"All {len(tasks)} tasks published successfully")
     
+
     def run(self):
         """Esegue il master"""
         # Mostra target
         logger.info("\n" + "="*60)
+        logger.info("SATELLITE DATA MASTER")
+        logger.info("="*60 + "\n")
+        
 
         # Genera task per tutta la Spagna
         tasks = self.generate_tasks_from_spain()
@@ -160,6 +203,9 @@ class SatelliteDataMasterBalanced:
         
         self.producer.close()
         logger.info("Master completed - Workers can start processing")
+
+
+
 
 if __name__ == "__main__":
     master = SatelliteDataMasterBalanced()

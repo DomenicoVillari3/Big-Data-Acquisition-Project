@@ -2,3 +2,4 @@
 *.gpkg
 */datasets/*
 */minio_data/*
+.venv
