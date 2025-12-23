@@ -20,21 +20,7 @@ class SatelliteDataMasterBalanced:
         self.topic = 'satellite-tasks'
         self.gpkg_path = "/export/mimmo/es_2023_all.gpkg"
         
-        # Sampling probabilities
-        self.sampling_probs = {
-            1: 0.20, 2: 0.80, 3: 1.00, 4: 0.20,
-            5: 0.15, 6: 1.00, 7: 1.00, 8: 0.40
-        }
-        
-        # Distribuzione reale
-        self.polygon_counts = {
-            1: 280158, 2: 84052, 3: 43474, 4: 288701,
-            5: 380935, 6: 58024, 7: 10331, 8: 125807
-        }
-        
-        self.conversion_rate = 0.35
-        self.target_samples = self._calculate_targets()
-        
+       
         # Mappatura classi
         self.target_classes = {
             'olive_plantations': 1,
@@ -52,24 +38,7 @@ class SatelliteDataMasterBalanced:
             'fallow_land_not_crop': 8, 'bare_arable_land': 8
         }
     
-    def _calculate_targets(self):
-        """Calcola target basato su sampling_probs"""
-        targets = {}
-        logger.info("Calculating target samples:")
-        
-        for class_id in range(1, 9):
-            poly_count = self.polygon_counts[class_id]
-            sampling_prob = self.sampling_probs[class_id]
-            estimated = int(poly_count * sampling_prob * self.conversion_rate)
-            target = min(15000, estimated)
-            targets[class_id] = target
-            
-            logger.info(
-                f"  Class {class_id}: {poly_count:,} polys × {sampling_prob:.2f} "
-                f"× {self.conversion_rate:.2f} = {estimated:,} → target: {target:,}"
-            )
-        
-        return targets
+   
     
     def generate_tasks_from_spain(self):
         """Genera task per tutta la Spagna - COME CODICE ORIGINALE"""
@@ -103,7 +72,7 @@ class SatelliteDataMasterBalanced:
         tasks = []
         task_id = 0
         
-        # Itera sulla griglia - COME CODICE ORIGINALE
+        # Itera sulla griglia
         for i, x in enumerate(x_ranges):
             for j, y in enumerate(y_ranges):
                 # Bbox diretto (senza conversione!)
@@ -113,7 +82,7 @@ class SatelliteDataMasterBalanced:
                 try:
                     local_gdf = gpd.read_file(self.gpkg_path, bbox=cell_bbox)
                     
-                    # Salta celle vuote
+                    # Salta celle con meno di 3 poligoni dentro 
                     if len(local_gdf) < 3:
                         continue
                     
@@ -138,10 +107,8 @@ class SatelliteDataMasterBalanced:
                         'task_id': task_id,
                         'bbox': cell_bbox,  # Stesso CRS del GPKG!
                         'grid_step': grid_step,
-                        'polygon_count': len(target_polys),
+                        'polygon_count': len(target_polys), 
                         'class_distribution': class_counts,
-                        'sampling_probs': self.sampling_probs,
-                        'target_samples': self.target_samples
                     }
                     tasks.append(task)
                     task_id += 1
@@ -176,15 +143,7 @@ class SatelliteDataMasterBalanced:
         """Esegue il master"""
         # Mostra target
         logger.info("\n" + "="*60)
-        logger.info("TARGET SAMPLES:")
-        logger.info("="*60)
-        total_target = sum(self.target_samples.values())
-        for class_id, target in sorted(self.target_samples.items()):
-            prob = self.sampling_probs[class_id]
-            logger.info(f"  Class {class_id}: {target:,} (sampling: {prob:.0%})")
-        logger.info(f"  TOTAL: {total_target:,} chips")
-        logger.info("="*60 + "\n")
-        
+
         # Genera task per tutta la Spagna
         tasks = self.generate_tasks_from_spain()
         

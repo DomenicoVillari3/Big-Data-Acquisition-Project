@@ -1,2 +1,4 @@
 *.csv
 *.gpkg
+*/datasets/*
+*/minio_data/*
