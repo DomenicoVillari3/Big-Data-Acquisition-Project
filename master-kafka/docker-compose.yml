@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # --- KAFKA (Redpanda) ---
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    command: >
+      redpanda start
+        --overprovisioned
+        --smp 1
+        --memory 1G
+        --reserve-memory 0M
+        --node-id 0
+        --check=false
+        --kafka-addr PLAINTEXT://0.0.0.0:9092
+        --advertise-kafka-addr PLAINTEXT://192.168.128.236:9092  # <--- IMPORTANTE: IP DELLA TUA MACCHINA SERVER
+        --set auto_create_topics_enabled=true
+        --set default_topic_partitions=10
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - bigdata-net
+
+  # --- MINIO (Storage) ---
+  minio:
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"     # API S3 (usata dai worker esterni)
+      - "9001:9001"     # Console Web UI
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./minio_data:/data
+    networks:
+      - bigdata-net
+
+  # Setup automatico bucket
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin); do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb myminio/satellite-data;
+      /usr/bin/mc anonymous set public myminio/satellite-data;
+      exit 0;
+      "
+    networks:
+      - bigdata-net
+
+  # --- SPARK MASTER ---
+  spark-master:
+    build: .   
+    container_name: spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      --host spark-master
+    environment:
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    volumes:
+      - ./datasets:/data
+    networks:
+      - bigdata-net
+
+  # --- SPARK WORKERS ---
+  spark-worker-1:
+    build: .   
+    container_name: spark-worker-1
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2G
+    depends_on:
+      - spark-master
+    volumes:
+      - ./datasets:/data
+    networks:
+      - bigdata-net
+
+  spark-worker-2:
+    build: .
+    container_name: spark-worker-2
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2G
+    depends_on:
+      - spark-master
+    volumes:
+      - ./datasets:/data
+    networks:
+      - bigdata-net
+
+  # --- JUPYTER ---
+  jupyter:
+    image: jupyter/pyspark-notebook
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    volumes:
+      - ./work:/home/jovyan/work
+    networks:
+      - bigdata-net
+
+networks:
+  bigdata-net:
+    driver: bridge
+
+volumes:
+  redpanda_data:
