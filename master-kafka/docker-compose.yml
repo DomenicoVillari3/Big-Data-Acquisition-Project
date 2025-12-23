@@ -14,9 +14,10 @@ services:
         --node-id 0
         --check=false
         --kafka-addr PLAINTEXT://0.0.0.0:9092
-        --advertise-kafka-addr PLAINTEXT://192.168.128.236:9092  # <--- IMPORTANTE: IP DELLA TUA MACCHINA SERVER
+        --advertise-kafka-addr PLAINTEXT://192.168.128.236:9092  
         --set auto_create_topics_enabled=true
         --set default_topic_partitions=10
+        --lock-memory=false 
     ports:
       - "9092:9092"
       - "9644:9644"
@@ -68,7 +69,7 @@ services:
       - SPARK_MASTER_WEBUI_PORT=8080
     ports:
       - "7077:7077"
-      - "8080:8080"
+      - "18080:8080"
     volumes:
       - ./datasets:/data
     networks:

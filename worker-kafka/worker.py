@@ -38,12 +38,15 @@ MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 BUCKET_NAME = "satellite-data"
 KAFKA_ADDRESS= "192.168.128.236:9092"
+GPKG_PATH="/mnt/mimmo/es_2023_all.gpkg"
+CLASSES_MAPPING_PATH="/mnt/mimmo/classes_mapping.json"
+
 
 class SatelliteDataWorkerBalanced:
     def __init__(self, worker_id, bootstrap_servers=KAFKA_ADDRESS):
         self.worker_id = worker_id
         # Configurazione
-        self.gpkg_path = "/mnt/mimmo/es_2023_all.gpkg"
+        self.gpkg_path = GPKG_PATH
         
         # Consumer per ricevere task
         self.consumer = KafkaConsumer(
@@ -87,7 +90,7 @@ class SatelliteDataWorkerBalanced:
             aws_secret_access_key=MINIO_SECRET_KEY
         )
 
-        with open("classes_mapping.json") as f:
+        with open(CLASSES_MAPPING_PATH) as f:
             self.binary_classes = dict(json.load(f))
             f.close()
 

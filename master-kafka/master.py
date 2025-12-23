@@ -10,6 +10,7 @@ from shapely.geometry import box
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class SatelliteDataMasterBalanced:
     def __init__(self, bootstrap_servers='localhost:9092'):
         self.producer = KafkaProducer(
