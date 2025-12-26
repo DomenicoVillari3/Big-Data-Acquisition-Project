@@ -1,0 +1,24 @@
+================================================================================
+ BINARY DATASET PROGRESS (elapsed: 58m 57s)
+================================================================================
+Tasks: 846 ✓ | 0 skipped | 114 ✗ | Total: 960
+Patches saved (.npz): 846
+Speed: 0.27 tasks/sec
+
+ Pixel Distribution (CROP vs NON-CROP):
+--------------------------------------------------------------------------------
+  CROP pixels:     43,948,785
+  NON-CROP pixels: 172,922,378
+  Total pixels:    216,871,163
+  CROP ratio:       20.3%
+
+ Worker Statistics:
+--------------------------------------------------------------------------------
+  Worker 2:  305 tasks |  266 ✓,    0 skipped,   39 ✗ | patches:  266 | crop_px: 14723249, noncrop_px: 53743854
+  Worker 3:  306 tasks |  265 ✓,    0 skipped,   41 ✗ | patches:  265 | crop_px: 12697711, noncrop_px: 55410889
+  Worker 9:  349 tasks |  315 ✓,    0 skipped,   34 ✗ | patches:  315 | crop_px: 16527825, noncrop_px: 63767635
+================================================================================
+
+INFO:__main__:Task 1170 | Worker    3 | Status: success | CROP_px: 111684, NON-CROP_px: 150732
+INFO:__main__:Task 1645 | Worker    2 | Status: success | CROP_px: 2263, NON-CROP_px: 244931
+INFO:__main__:Task 1660 | Worker    2 | Status: success | CROP_px: 30749, NON-CROP_px: 214213

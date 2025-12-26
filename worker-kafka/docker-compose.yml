@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # =============================================
+  # SPARK WORKER REMOTO
+  # =============================================
+  spark-worker:
+    build: .  # Copia Dockerfile nella dir
+    container_name: spark-worker-${WORKER_ID:-1}
+    hostname: spark-worker-${WORKER_ID:-1}
+    environment:
+      - SPARK_WORKER_CORES=4
+      - SPARK_WORKER_MEMORY=12G
+      - SPARK_WORKER_PORT=7078
+      - SPARK_WORKER_WEBUI_PORT=8081
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://192.168.128.236:7077
+      --host ${HOST_IP}
+    ports:
+      - "7078:7078"
+      - "8081:8081"
+    volumes:
+      - ./datasets:/data
+    network_mode: host  # USA host network per cross-machine!
+
+# NO networks block (usa host!)
