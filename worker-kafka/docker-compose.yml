@@ -4,24 +4,20 @@ services:
   spark-worker:
     build: . 
     container_name: spark-worker-${WORKER_ID:-1}
-    # ❌ RIMUOVI QUESTA RIGA: hostname: spark-worker-${WORKER_ID:-1}
-    # Lascia che il container erediti l'hostname della macchina fisica (es. PC2)
     
     environment:
       - SPARK_WORKER_CORES=4
       - SPARK_WORKER_MEMORY=12G
       - SPARK_WORKER_PORT=7078
       - SPARK_WORKER_WEBUI_PORT=8081
-      # ✅ AGGIUNGI QUESTA: Forza Spark a usare l'IP numerico e ignorare il DNS
+      # ✅ Questo gestisce l'IP host automaticamente
       - SPARK_LOCAL_IP=${HOST_IP}
     
+    # ✅ COMANDO PULITO: Solo la classe e l'URL del Master
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
       spark://192.168.128.236:7077
-      --host ${HOST_IP} # Questo dice al Master come contattarmi
       
-    # Le porte in host mode vengono ignorate nel blocco ports, 
-    # ma servono come documentazione. Spark userà quelle definite nelle env vars.
     ports:
       - "7078:7078"
       - "8081:8081"
