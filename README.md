@@ -1,6 +1,14 @@
 
-# SatStream-ML: Fase 1 - Data Ingestion Pipeline
 
+## Requirements
+
+- **Python**: 3.8.x
+- **Java**: 11.0.29 (OpenJDK)
+- **PySpark**: 3.5.1
+- **Docker**: 29.0.2
+
+
+# SatStream-ML: Fase 1 - Data Ingestion Pipeline
 ## 📋 Panoramica
 
 **Parte 1 del progetto Big Data**: Pipeline distribuita Kafka → Worker → MinIO per generare dataset **pixel-wise CROP vs NON-CROP** da Sentinel-2 + EuroCrops.

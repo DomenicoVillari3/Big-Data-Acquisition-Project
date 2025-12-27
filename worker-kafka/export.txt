@@ -1,0 +1,2 @@
+export WORKER_ID=2
+export HOST_IP=192.168.128.238

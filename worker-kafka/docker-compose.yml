@@ -7,7 +7,7 @@ services:
     
     environment:
       - SPARK_WORKER_CORES=4
-      - SPARK_WORKER_MEMORY=12G
+      - SPARK_WORKER_MEMORY=16G
       - SPARK_WORKER_PORT=7078
       - SPARK_WORKER_WEBUI_PORT=8081
       # ✅ Questo gestisce l'IP host automaticamente

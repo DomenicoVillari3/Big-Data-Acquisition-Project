@@ -67,20 +67,18 @@ services:
     hostname: spark-master
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
-      --host 192.168.128.236
+      --host 0.0.0.0   
       --port 7077
       --webui-port 8080
     environment:
-      - SPARK_MASTER_HOST=192.168.128.236
+      - SPARK_MASTER_HOST=192.168.128.236  # <--- Questo è l'IP che il Master comunica ai Worker
       - SPARK_MASTER_PORT=7077
       - SPARK_MASTER_WEBUI_PORT=8080
-      - SPARK_NO_DAEMONIZE=true
     ports:
-      - "7077:7077"
-      - "18080:8080"   # WebUI
+      - "7077:7077"   # Mapping fondamentale
+      - "18080:8080"
     volumes:
       - ./datasets:/data
-      - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
     networks:
       - bigdata-net
 
@@ -114,9 +112,16 @@ services:
     image: jupyter/pyspark-notebook
     container_name: jupyter
     ports:
-      - "8888:8888"
+      - "8888:8888"       # Jupyter UI
+      - "4040:4040"       # Spark UI (Job progress)
+      # 👇 IMPORTANTE: Porte fisse per la comunicazione Driver <-> Worker
+      - "20000-20005:20000-20005" 
+    environment:
+      # Passiamo l'IP del master come variabile per comodità
+      - MASTER_PUBLIC_IP=192.168.128.236
     volumes:
       - ./work:/home/jovyan/work
+      - ./datasets:/data
     networks:
       - bigdata-net
 
