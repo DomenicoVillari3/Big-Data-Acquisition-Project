@@ -31,6 +31,9 @@ def parse_args():
 
     return parser.parse_args()
 
+
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 MINIO_ENDPOINT = "http://192.168.128.236:9000"  # es. "http://192.168.128.50:9000"
@@ -196,6 +199,49 @@ class SatelliteDataWorkerBalanced:
         logger.info(f"  Saved patch to MinIO: {s3_path}")
         return s3_path
     
+    def save_parquet_to_minio(self, img_np, mask_np, task_id, worker_id):
+        """
+        Salva patch come Parquet pixel-level (6 features + label) su MinIO.
+        FORMATTO NATIVO SPARK → 100x più veloce!
+        """
+        
+        # Flatten arrays in formato tabellare
+        h, w = mask_np.shape
+        n_pixels = h * w
+        
+        # Reshape features: (H, W, 6) → (n_pixels, 6)
+        flat_features = img_np.reshape(-1, 6)  # (65536, 6)
+        flat_labels = mask_np.flatten()         # (65536,)
+        
+        # Crea DataFrame Pandas (tabellare)
+        import pandas as pd
+        
+        df = pd.DataFrame({
+            'patch_id': [f"task_{task_id}_worker_{worker_id}"] * n_pixels,
+            'pixel_idx': range(n_pixels),
+            'red_b4': flat_features[:, 0],
+            'nir_b8': flat_features[:, 1],
+            'swir_b11': flat_features[:, 2],
+            'ndvi': flat_features[:, 3],
+            'ndwi': flat_features[:, 4],
+            'ndmi': flat_features[:, 5],
+            'label': flat_labels.astype(int)
+        })
+        
+        # Parquet compresso (tiny!)
+        buffer = io.BytesIO()
+        df.to_parquet(buffer, compression='snappy', index=False)
+        buffer.seek(0)
+        
+        # Salva su MinIO
+        object_name = f"parquet/task_{task_id}_worker_{worker_id}.parquet"
+        self.s3_client.upload_fileobj(buffer, BUCKET_NAME, object_name)
+        
+        s3_path = f"s3a://{BUCKET_NAME}/{object_name}"
+        logger.info(f"💾 Saved Parquet patch to MinIO: {s3_path} ({df.shape[0]:,} pixels)")
+        
+        return s3_path
+    
     def process_task(self, task):
         """Processa una singola cella (bbox) e salva UNA patch (bands+mask) su MinIO."""
         task_id = task['task_id']
@@ -282,7 +328,8 @@ class SatelliteDataWorkerBalanced:
             )
 
             # 6) Salva patch (bands+mask) su MinIO
-            s3_path = self.save_npz_to_minio(img_np, mask_np, task_id, self.worker_id)
+            #s3_path = self.save_npz_to_minio(img_np, mask_np, task_id, self.worker_id)
+            s3_path = self.save_parquet_to_minio(img_np, mask_np, task_id, self.worker_id)
             result["s3_path"] = s3_path
 
             # 7) Manda messaggio a topic per Spark
