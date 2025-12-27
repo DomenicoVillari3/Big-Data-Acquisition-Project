@@ -15,6 +15,7 @@ import io
 import boto3
 import sys
 import argparse
+import pandas as pd
 
 
 def parse_args():
@@ -201,46 +202,46 @@ class SatelliteDataWorkerBalanced:
     
     def save_parquet_to_minio(self, img_np, mask_np, task_id, worker_id):
         """
-        Salva patch come Parquet pixel-level (6 features + label) su MinIO.
-        FORMATTO NATIVO SPARK → 100x più veloce!
+        Salva tutte le bande originali (dinamico) + label in Parquet.
+        img_np.shape = (N_BANDE, 256, 256) dove N_BANDE può essere 10, 12, etc.
         """
         
-        # Flatten arrays in formato tabellare
-        h, w = mask_np.shape
+        # Shape dinamico
+        n_bands, h, w = img_np.shape
         n_pixels = h * w
+        logger.info(f"💾 Saving {n_bands} bands, {n_pixels} pixels")
         
-        # Reshape features: (H, W, 6) → (n_pixels, 6)
-        flat_features = img_np.reshape(-1, 6)  # (65536, 6)
-        flat_labels = mask_np.flatten()         # (65536,)
+        # Flatten dinamico: (N_BANDE, H, W) → (n_pixels, N_BANDE)
+        flat_features = img_np.reshape(n_pixels, n_bands)  # ✅ DINAMICO!
+        flat_labels = mask_np.flatten()
         
-        # Crea DataFrame Pandas (tabellare)
-        import pandas as pd
-        
-        df = pd.DataFrame({
+        # Crea colonne DINAMICHE per tutte le bande
+        df_data = {
             'patch_id': [f"task_{task_id}_worker_{worker_id}"] * n_pixels,
             'pixel_idx': range(n_pixels),
-            'red_b4': flat_features[:, 0],
-            'nir_b8': flat_features[:, 1],
-            'swir_b11': flat_features[:, 2],
-            'ndvi': flat_features[:, 3],
-            'ndwi': flat_features[:, 4],
-            'ndmi': flat_features[:, 5],
             'label': flat_labels.astype(int)
-        })
+        }
         
-        # Parquet compresso (tiny!)
+        # Aggiungi TUTTE le bande come colonne
+        for band_idx in range(n_bands):
+            df_data[f'band_{band_idx}'] = flat_features[:, band_idx]
+        
+        
+        df = pd.DataFrame(df_data)
+        
+        # Parquet compresso
         buffer = io.BytesIO()
         df.to_parquet(buffer, compression='snappy', index=False)
         buffer.seek(0)
         
-        # Salva su MinIO
         object_name = f"parquet/task_{task_id}_worker_{worker_id}.parquet"
         self.s3_client.upload_fileobj(buffer, BUCKET_NAME, object_name)
         
         s3_path = f"s3a://{BUCKET_NAME}/{object_name}"
-        logger.info(f"💾 Saved Parquet patch to MinIO: {s3_path} ({df.shape[0]:,} pixels)")
+        logger.info(f"💾 Saved {df.shape[0]:,} pixels x {n_bands} bands → {s3_path}")
         
         return s3_path
+
     
     def process_task(self, task):
         """Processa una singola cella (bbox) e salva UNA patch (bands+mask) su MinIO."""
@@ -308,7 +309,27 @@ class SatelliteDataWorkerBalanced:
 
             img_np = da.to_numpy()  # (C, H, W)
             mask_np = cube.binary_label.fillna(0).to_numpy().astype("uint8")  # (H, W)
-
+            
+            TARGET_H, TARGET_W = 256, 256
+    
+            orig_h, orig_w = img_np.shape[1], img_np.shape[2]
+            zoom_h = TARGET_H / orig_h
+            zoom_w = TARGET_W / orig_w
+            
+            # Resize TUTTE le bande originali
+            n_bands = img_np.shape[0]  # 10, 12, etc.
+            img_fixed = np.zeros((n_bands, TARGET_H, TARGET_W), dtype=np.float32)
+            
+            for c in range(n_bands):
+                from scipy.ndimage import zoom
+                img_fixed[c] = zoom(img_np[c], (zoom_h, zoom_w), order=1)
+            
+            # Resize mask
+            mask_fixed = zoom(mask_np, (zoom_h, zoom_w), order=0)
+            mask_fixed = (mask_fixed > 0.5).astype('uint8')
+            
+            logger.info(f"✅ SHAPE: {n_bands} bands ({TARGET_H}x{TARGET_W})")
+            
             if img_np.ndim != 3:
                 result["status"] = "invalid_image_shape"
                 return result
@@ -354,6 +375,9 @@ class SatelliteDataWorkerBalanced:
             result["error"] = str(e)
 
         return result
+    
+
+
     
     def start(self):
         """Avvia il worker"""
