@@ -23,6 +23,7 @@ services:
       - "8081:8081"
     
     volumes:
+      - /dev/shm:/dev/shm
       - ./datasets:/data
     
     network_mode: host
