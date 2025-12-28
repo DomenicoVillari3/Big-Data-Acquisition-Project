@@ -7,8 +7,8 @@ services:
     command: >
       redpanda start
         --overprovisioned
-        --smp 1
-        --memory 1G
+        --smp 2
+        --memory 2G
         --reserve-memory 0M
         --node-id 0
         --check=false
@@ -64,23 +64,24 @@ services:
   spark-master:
     build: .
     container_name: spark-master
-    hostname: spark-master
+    #hostname: spark-master
+    network_mode: host
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
-      --host 0.0.0.0   
+      --host 192.168.128.236
       --port 7077
       --webui-port 8080
     environment:
       - SPARK_MASTER_HOST=192.168.128.236  # <--- Questo è l'IP che il Master comunica ai Worker
       - SPARK_MASTER_PORT=7077
       - SPARK_MASTER_WEBUI_PORT=8080
-    ports:
-      - "7077:7077"   # Mapping fondamentale
-      - "18080:8080"
+    #ports:
+    #  - "7077:7077"   # Mapping fondamentale
+    #  - "18080:8080"
     volumes:
       - ./datasets:/data
-    networks:
-      - bigdata-net
+    #networks:
+    #  - bigdata-net
 
   # =============================================
   # SPARK WORKER LOCALE (su master)
@@ -88,42 +89,48 @@ services:
   spark-worker-master:
     build: .
     container_name: spark-worker-master
-    hostname: spark-worker-master
+    #hostname: spark-worker-master
+    network_mode: host
     environment:
       - SPARK_WORKER_CORES=4
-      - SPARK_WORKER_MEMORY=12G
+      - SPARK_WORKER_MEMORY=10G
       - SPARK_WORKER_PORT=7078
       - SPARK_WORKER_WEBUI_PORT=8081
+      # IMPORTANTE: Dice al master di usare l'IP fisico, non quello Docker
+      - SPARK_LOCAL_IP=192.168.128.236
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
       spark://192.168.128.236:7077
-      --host spark-worker-master
+      --host 192.168.128.236
+      --port 7078
+      --webui-port 8081
     depends_on:
       - spark-master
-    ports:
-      - "7078:7078"
-      - "18081:8081"
+    #ports:
+    #  - "7078:7078"
+    #  - "18081:8081"
     volumes:
       - ./datasets:/data
-    networks:
-      - bigdata-net
+    #networks:
+    #  - bigdata-net
 
-  jupyter:
-    image: jupyter/pyspark-notebook
-    container_name: jupyter
-    ports:
-      - "8888:8888"       # Jupyter UI
-      - "4040:4040"       # Spark UI (Job progress)
-      # 👇 IMPORTANTE: Porte fisse per la comunicazione Driver <-> Worker
-      - "20000-20005:20000-20005" 
-    environment:
-      # Passiamo l'IP del master come variabile per comodità
-      - MASTER_PUBLIC_IP=192.168.128.236
-    volumes:
-      - ./work:/home/jovyan/work
-      - ./datasets:/data
-    networks:
-      - bigdata-net
+  #jupyter:
+ #   image: jupyter/pyspark-notebook
+ #   container_name: jupyter
+ # #  network_mode: host
+ #   ports:
+ #     - "8888:8888"       # Jupyter UI
+ #     - "4040:4040"       # Spark UI (Job progress)
+ #     # 👇 IMPORTANTE: Porte fisse per la comunicazione Driver <-> Worker
+ #     - "20000-20005:20000-20005" 
+ #   environment:
+ #     # Passiamo l'IP del master come variabile per comodità
+ #     - MASTER_PUBLIC_IP=192.168.128.236
+ #   volumes:
+ #     - ./work:/home/jovyan/work
+ #     - ./datasets:/data
+ #   networks:
+ #     - bigdata-net
 
 networks:
   bigdata-net:

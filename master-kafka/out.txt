@@ -22,3 +22,39 @@ Speed: 0.27 tasks/sec
 INFO:__main__:Task 1170 | Worker    3 | Status: success | CROP_px: 111684, NON-CROP_px: 150732
 INFO:__main__:Task 1645 | Worker    2 | Status: success | CROP_px: 2263, NON-CROP_px: 244931
 INFO:__main__:Task 1660 | Worker    2 | Status: success | CROP_px: 30749, NON-CROP_px: 214213
+
+
+
+-------------
+docker logs -f spark-master
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+(base) amministratore@PC7:~$ sudo !!
+sudo docker logs -f spark-master
+[sudo] password for amministratore: 
+Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+25/12/28 14:57:11 INFO Master: Started daemon with process name: 1@PC7
+25/12/28 14:57:11 INFO SignalUtils: Registering signal handler for TERM
+25/12/28 14:57:11 INFO SignalUtils: Registering signal handler for HUP
+25/12/28 14:57:11 INFO SignalUtils: Registering signal handler for INT
+25/12/28 14:57:11 WARN Utils: Your hostname, PC7 resolves to a loopback address: 127.0.1.1; using 192.168.128.236 instead (on interface eno1)
+25/12/28 14:57:11 WARN Utils: Set SPARK_LOCAL_IP if you need to bind to another address
+25/12/28 14:57:12 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+25/12/28 14:57:12 INFO SecurityManager: Changing view acls to: spark
+25/12/28 14:57:12 INFO SecurityManager: Changing modify acls to: spark
+25/12/28 14:57:12 INFO SecurityManager: Changing view acls groups to: 
+25/12/28 14:57:12 INFO SecurityManager: Changing modify acls groups to: 
+25/12/28 14:57:12 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: spark; groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY
+25/12/28 14:57:12 INFO Utils: Successfully started service 'sparkMaster' on port 7077.
+25/12/28 14:57:12 INFO Master: Starting Spark master at spark://192.168.128.236:7077
+25/12/28 14:57:12 INFO Master: Running Spark version 3.5.1
+25/12/28 14:57:12 INFO JettyUtils: Start Jetty 0.0.0.0:8080 for MasterUI
+25/12/28 14:57:12 WARN Utils: Service 'MasterUI' could not bind on port 8080. Attempting port 8081.
+25/12/28 14:57:12 WARN Utils: Service 'MasterUI' could not bind on port 8081. Attempting port 8082.
+25/12/28 14:57:12 WARN Utils: Service 'MasterUI' could not bind on port 8082. Attempting port 8083.
+25/12/28 14:57:12 INFO Utils: Successfully started service 'MasterUI' on port 8083.
+25/12/28 14:57:13 INFO MasterWebUI: Bound MasterWebUI to 0.0.0.0, and started at http://192.168.128.236:8083
+25/12/28 14:57:13 INFO Master: I have been elected leader! New state: ALIVE
+25/12/28 14:57:13 INFO Master: Registering worker 192.168.128.236:7078 with 4 cores, 16.0 GiB RAM
+25/12/28 14:58:43 INFO Master: Registering worker 192.168.128.238:7078 with 4 cores, 16.0 GiB RAM
+25/12/28 14:59:54 INFO Master: Registering worker 127.0.0.1:7078 with 4 cores, 16.0 GiB RAM
+25/12/28 15:00:14 INFO Master: Registering worker 192.168.128.232:7078 with 4 cores, 16.0 GiB RAM
