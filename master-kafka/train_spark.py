@@ -49,18 +49,9 @@ def get_local_ip(target_ip):
 CLIENT_IP = get_local_ip(MASTER_IP)
 print(f"📡 Client: {CLIENT_IP} → Master: {MASTER_IP}")
 
-# %%
-# ⏱️ TIMER DECORATOR
-def time_it(func):
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        result = func(*args, **kwargs)
-        elapsed = time.time() - start
-        print(f"⏱️  {func.__name__}: {elapsed:.1f}s")
-        return result, elapsed
-    return wrapper
 
-# 🚀 SPARK (stessa config)
+
+
 # Trova automaticamente l'IP della TUA macchina (Client PC7)
 # che è visibile al Master.
 def get_local_ip(target_ip):
@@ -109,11 +100,8 @@ conf.set("spark.hadoop.fs.s3a.secret.key", MINIO_SECRET_KEY)
 conf.set("spark.hadoop.fs.s3a.path.style.access", "true")
 conf.set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
 conf.set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")
+conf.set("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4")
 
-conf.set("spark.jars.packages", 
-         "org.apache.hadoop:hadoop-aws:3.3.4,"
-         "org.apache.hadoop:hadoop-common:3.3.4,"
-         "com.amazonaws:aws-java-sdk-bundle:1.12.262")
 
 # Timeout e Heartbeat (utili in reti distribuite)
 conf.set("spark.network.timeout", "600s")
@@ -143,89 +131,89 @@ print("✅ Spark pronto!")
 
 # %%
 # 📦 CARICA + FEATURES
-@time_it
-def load_features():
-    pixels_df = spark.read.parquet(f"s3a://{MINIO_BUCKET_NAME}/parquet/*.parquet")
-    
-    features_df = pixels_df.select(
-        (col("band_4")/10000.0).alias("red_b4"),
-        (col("band_2")/10000.0).alias("nir_b8"),
-        (col("band_8")/10000.0).alias("swir_b11"),
-        (col("band_1")/10000.0).alias("green_b3"),
-        col("label").cast("float")
-    ).withColumn("ndvi", when((col("nir_b8")+col("red_b4"))>0.001, 
-                              (col("nir_b8")-col("red_b4"))/(col("nir_b8")+col("red_b4")))
-                   .otherwise(0.0)) \
-     .withColumn("ndwi", when((col("green_b3")+col("swir_b11"))>0.001, 
-                              (col("green_b3")-col("swir_b11"))/(col("green_b3")+col("swir_b11")))
-                   .otherwise(0.0)) \
-     .withColumn("ndmi", when((col("nir_b8")+col("swir_b11"))>0.001, 
-                              (col("nir_b8")-col("swir_b11"))/(col("nir_b8")+col("swir_b11")))
-                   .otherwise(0.0))
-    
-    return features_df
 
-features_df, t_load = load_features()
-print(f"📊 {features_df.count():,} pixel | Crop: {features_df.filter(col('label')==1.0).count()/features_df.count()*100:.1f}%")
+
+t=time.time()
+pixels_df = spark.read.parquet(f"s3a://{MINIO_BUCKET_NAME}/parquet/*.parquet")
+
+features_df = pixels_df.select(
+    (col("band_4")/10000.0).alias("red_b4"),
+    (col("band_2")/10000.0).alias("nir_b8"),
+    (col("band_8")/10000.0).alias("swir_b11"),
+    (col("band_1")/10000.0).alias("green_b3"),
+    col("label").cast("float")
+).withColumn("ndvi", when((col("nir_b8")+col("red_b4"))>0.001, 
+                            (col("nir_b8")-col("red_b4"))/(col("nir_b8")+col("red_b4")))
+                .otherwise(0.0)) \
+    .withColumn("ndwi", when((col("green_b3")+col("swir_b11"))>0.001, 
+                            (col("green_b3")-col("swir_b11"))/(col("green_b3")+col("swir_b11")))
+                .otherwise(0.0)) \
+    .withColumn("ndmi", when((col("nir_b8")+col("swir_b11"))>0.001, 
+                            (col("nir_b8")-col("swir_b11"))/(col("nir_b8")+col("swir_b11")))
+                .otherwise(0.0))
+t_load=time.time()-t
+print(f"📊 {features_df.count():,} total pixel | Crop pixels: {features_df.filter(col('label')==1.0).count()/features_df.count()*100:.1f}%")
 
 # %%
 # 🎯 UNDERSAMPLING + CSV SAMPLE
-@time_it
-def balance_and_csv():
-    crop_df = features_df.filter(col("label") == 1.0)
-    noncrop_df = features_df.filter(col("label") == 0.0)
-    
-    n_crop = crop_df.count()
-    noncrop_sample = noncrop_df.sample(False, n_crop/noncrop_df.count(), seed=42)
-    balanced_df = crop_df.union(noncrop_sample)
-    
-    # 📈 CSV: 100K sample per plotting
-    sample_csv = balanced_df.sample(False, 100000/balanced_df.count(), seed=42)
-    pandas_df = sample_csv.toPandas()
-    
-    # SALVA CSV
-    #pandas_df.to_csv("crop_features_balanced.csv", index=False)
-    #print(f"💾 crop_features_balanced.csv: {len(pandas_df):,} righe")
-    
-    return balanced_df, pandas_df
 
-balanced_df, csv_df, t_balance = balance_and_csv()
+
+t=time.time()
+crop_df = features_df.filter(col("label") == 1.0).sample(0.056, seed=42)      # 89M → 5M
+noncrop_df = features_df.filter(col("label") == 0.0).sample(0.014, seed=42)  # 355M → 5M
+del features_df
+n_crop = crop_df.count()
+#noncrop_sample = noncrop_df.sample(False, n_crop/noncrop_df.count(), seed=42)
+balanced_df = crop_df.union(noncrop_df)
+
+# 📈 CSV: 100K sample per plotting
+sample_csv = balanced_df.sample(False, 100000/balanced_df.count(), seed=42)
+csv_df = sample_csv.toPandas()
+
+# SALVA CSV
+#pandas_df.to_csv("crop_features_balanced.csv", index=False)
+#print(f"💾 crop_features_balanced.csv: {len(pandas_df):,} righe")
+t_balance =time.time()-t
+gc.collect()
 
 # %%
 # 🧠 TRAINING CON PROGRESS
-@time_it
-def train_model():
-    assembler = VectorAssembler(inputCols=["red_b4","nir_b8","swir_b11","ndvi","ndwi","ndmi"], 
-                               outputCol="features_vec", handleInvalid="skip")
-    scaler = StandardScaler(inputCol="features_vec", outputCol="scaled_features", withMean=True, withStd=True)
-    rf = RandomForestClassifier(featuresCol="scaled_features", labelCol="label", numTrees=100, maxDepth=10, seed=42)
-    
-    pipeline = Pipeline(stages=[assembler, scaler, rf])
-    train_df, test_df = balanced_df.randomSplit([0.8, 0.2], seed=42)
-    
-    model = pipeline.fit(train_df)
-    return model, train_df, test_df
 
-model, train_df, test_df, t_train = train_model()
+
+assembler = VectorAssembler(inputCols=["red_b4","nir_b8","swir_b11","ndvi","ndwi","ndmi"], 
+                            outputCol="features_vec", handleInvalid="skip")
+scaler = StandardScaler(inputCol="features_vec", outputCol="scaled_features", withMean=True, withStd=True)
+rf = RandomForestClassifier(featuresCol="scaled_features", 
+                            labelCol="label", 
+                            numTrees=75, 
+                            maxDepth=8, 
+                            subsamplingRate=0.7,
+                            seed=42)
+
+pipeline = Pipeline(stages=[assembler, scaler, rf])
+train_df, test_df = balanced_df.randomSplit([0.8, 0.2], seed=42)
+
+t=time.time()
+model = pipeline.fit(train_df)
+t_train=time.time()-t
+gc.collect()
 
 # %%
 # 📊 VALUTAZIONE
-@time_it
-def evaluate_model():
-    predictions = model.transform(test_df)
-    
-    auc = BinaryClassificationEvaluator(labelCol="label").evaluate(predictions)
-    f1 = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="f1").evaluate(predictions)
-    
-    print(f"\n🎯 AUC-ROC: {auc:.4f} | F1: {f1:.4f}")
-    
-    # Confusion Matrix CSV
-    cm_df = predictions.groupBy("label", "prediction").count().toPandas()
-    cm_df.to_csv("confusion_matrix.csv", index=False)
-    
-    return predictions, auc, f1,cm_df
 
-predictions, auc, f1, t_eval,cm_df = evaluate_model()
+t=time.time()
+predictions = model.transform(test_df)
+
+auc = BinaryClassificationEvaluator(labelCol="label").evaluate(predictions)
+f1 = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="f1").evaluate(predictions)
+
+print(f"\n🎯 AUC-ROC: {auc:.4f} | F1: {f1:.4f}")
+
+# Confusion Matrix CSV
+cm_df = predictions.groupBy("label", "prediction").count().toPandas()
+cm_df.to_csv("confusion_matrix.csv", index=False)
+t_eval=time.time()-t
+gc.collect()
 
 # %%
 # 🌿 FEATURE IMPORTANCE CSV
@@ -266,6 +254,7 @@ axes[1,1].set_title("NDVI vs Red (B4)")
 plt.tight_layout()
 plt.savefig("crop_ml_results.png", dpi=300, bbox_inches='tight')
 plt.show()
+gc.collect()
 
 # %%
 # ⏱️ SUMMARY TEMPI
@@ -278,7 +267,6 @@ total_time = t_load + t_balance + t_train + t_eval
 print(f"   ❌ TOTALE:      {total_time:.1f}s ({total_time/60:.1f}min)")
 
 # 💾 SALVA TUTTO
-model.write().overwrite().save(f"s3a://{MINIO_BUCKET_NAME}/models/crop_rf_csv")
 print("\n🏁 COMPLETATO!")
 print("📁 File generati:")
 print("   crop_features_balanced.csv")
