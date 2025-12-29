@@ -58,6 +58,7 @@ class SatelliteDataWorkerBalanced:
             bootstrap_servers=[bootstrap_servers],
             value_deserializer=lambda m: json.loads(m.decode('utf-8')),
             group_id='satellite-workers',
+            
             # Auto-commit
             enable_auto_commit=False,
             # Timeout
@@ -268,7 +269,7 @@ class SatelliteDataWorkerBalanced:
             # 1) Leggi poligoni nella bbox
             local_gdf = gpd.read_file(self.gpkg_path, bbox=bbox)
 
-            if len(local_gdf) < 3:
+            if len(local_gdf) < 5:
                 result["status"] = "skipped_few_polygons"
                 return result
 
