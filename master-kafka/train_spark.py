@@ -37,6 +37,8 @@ MINIO_ENDPOINT = f"http://{MASTER_IP}:9000"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 
+RES_DIR = "/home/amministratore/Scrivania/Big Data Acquisition/progetto mimmo/Big-Data-Acquisition-Project/master-kafka/results"
+os.makedirs(RES_DIR, exist_ok=True)
 
 def get_local_ip(target_ip):
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -144,13 +146,16 @@ features_df = pixels_df.select(
     col("label").cast("float")
 ).withColumn("ndvi", when((col("nir_b8")+col("red_b4"))>0.001, 
                             (col("nir_b8")-col("red_b4"))/(col("nir_b8")+col("red_b4")))
-                .otherwise(0.0)) \
-    .withColumn("ndwi", when((col("green_b3")+col("swir_b11"))>0.001, 
-                            (col("green_b3")-col("swir_b11"))/(col("green_b3")+col("swir_b11")))
-                .otherwise(0.0)) \
-    .withColumn("ndmi", when((col("nir_b8")+col("swir_b11"))>0.001, 
-                            (col("nir_b8")-col("swir_b11"))/(col("nir_b8")+col("swir_b11")))
                 .otherwise(0.0))
+                
+'''.withColumn("ndwi", when((col("green_b3")+col("swir_b11"))>0.001, 
+                        (col("green_b3")-col("swir_b11"))/(col("green_b3")+col("swir_b11")))
+            .otherwise(0.0)) 
+.withColumn("ndmi", when((col("nir_b8")+col("swir_b11"))>0.001, 
+                        (col("nir_b8")-col("swir_b11"))/(col("nir_b8")+col("swir_b11")))
+            .otherwise(0.0))'''
+
+# Conteggio totale
 t_load=time.time()-t
 print(f"📊 {features_df.count():,} total pixel | Crop pixels: {features_df.filter(col('label')==1.0).count()/features_df.count()*100:.1f}%")
 
@@ -159,10 +164,13 @@ print(f"📊 {features_df.count():,} total pixel | Crop pixels: {features_df.fil
 
 
 t=time.time()
-crop_df = features_df.filter(col("label") == 1.0).sample(0.056, seed=42)      # 89M → 5M
-noncrop_df = features_df.filter(col("label") == 0.0).sample(0.014, seed=42)  # 355M → 5M
-del features_df
+crop_df = features_df.filter(col("label") == 1.0).sample(0.1, seed=42)      # ~9M
+noncrop_df = features_df.filter(col("label") == 0.0).sample(0.025, seed=42)  # ~9M
 n_crop = crop_df.count()
+print(f" Bilanciamento: Crop pixels: {n_crop:,} | Non-Crop pixels: {noncrop_df.count():,}")
+del features_df
+
+
 #noncrop_sample = noncrop_df.sample(False, n_crop/noncrop_df.count(), seed=42)
 balanced_df = crop_df.union(noncrop_df)
 
@@ -178,17 +186,27 @@ gc.collect()
 
 # %%
 # 🧠 TRAINING CON PROGRESS
+features=["red_b4","nir_b8","swir_b11","ndvi"]
 
+assembler = VectorAssembler(
+    inputCols=features,
+    outputCol="features_vec", handleInvalid="skip")
 
-assembler = VectorAssembler(inputCols=["red_b4","nir_b8","swir_b11","ndvi","ndwi","ndmi"], 
-                            outputCol="features_vec", handleInvalid="skip")
-scaler = StandardScaler(inputCol="features_vec", outputCol="scaled_features", withMean=True, withStd=True)
-rf = RandomForestClassifier(featuresCol="scaled_features", 
-                            labelCol="label", 
-                            numTrees=75, 
-                            maxDepth=8, 
-                            subsamplingRate=0.7,
-                            seed=42)
+scaler = StandardScaler(
+    inputCol="features_vec",
+    outputCol="scaled_features",  # ← Nuova colonna scalata
+    withMean=True,
+    withStd=True
+)
+
+rf = RandomForestClassifier(
+    featuresCol="scaled_features",  # ← USA features scalate!
+    labelCol="label",
+    numTrees=50,
+    maxDepth=10,  # ← Aumenta da 8
+    subsamplingRate=0.8,
+    seed=42
+)
 
 pipeline = Pipeline(stages=[assembler, scaler, rf])
 train_df, test_df = balanced_df.randomSplit([0.8, 0.2], seed=42)
@@ -211,49 +229,57 @@ print(f"\n🎯 AUC-ROC: {auc:.4f} | F1: {f1:.4f}")
 
 # Confusion Matrix CSV
 cm_df = predictions.groupBy("label", "prediction").count().toPandas()
-cm_df.to_csv("confusion_matrix.csv", index=False)
+cm_df.to_csv(os.path.join(RES_DIR,"confusion_matrix.csv"), index=False)
 t_eval=time.time()-t
 gc.collect()
 
 # %%
 # 🌿 FEATURE IMPORTANCE CSV
 importances = model.stages[-1].featureImportances
-features = ["Red(B4)", "NIR(B8)", "SWIR(B11)", "NDVI", "NDWI", "NDMI"]
-
+imp_values = [float(importances[i]) for i in range(len(features))]  # ← FIX
 imp_df = pd.DataFrame({
     "feature": features,
-    "importance": importances
+    "importance": imp_values  # ← Numeri puliti!
 })
-imp_df.to_csv("feature_importance.csv", index=False)
+imp_df.to_csv(os.path.join(RES_DIR,"feature_importance.csv"), index=False)
 print("\n🌿 Feature Importance:")
 print(imp_df)
 
-# %%
-# 📈 PLOT TRAINING (locale)
-plt.style.use('seaborn-v0_8')
-fig, axes = plt.subplots(2, 2, figsize=(15, 12))
 
-# 1. Distribuzione NDVI per label
-sns.histplot(data=csv_df, x="ndvi", hue="label", bins=50, ax=axes[0,0])
-axes[0,0].set_title("NDVI Distribution (Balanced)")
-axes[0,0].set_xlim(-1, 1)
+# %%
+# 📊 GRAFICI SINGOLI LEGGIBILI (file separati)
+# 1. NDVI Distribution
+plt.figure(figsize=(10, 6))
+csv_df['label_cat'] = csv_df['label'].map({0: 'Non-Crop', 1: 'Crop'})
+sns.histplot(data=csv_df, x="ndvi", hue="label_cat", bins=50, alpha=0.7)
+plt.title("NDVI Distribution - Crop vs Non-Crop", fontsize=14)
+plt.savefig(os.path.join(RES_DIR,"ndvi_distribution.png"), dpi=300)
+plt.close()
 
 # 2. Confusion Matrix
-cm_pivot = cm_df.pivot(index='label', columns='prediction', values='count').fillna(0)
-sns.heatmap(cm_pivot, annot=True, fmt='d', cmap='Blues', ax=axes[0,1])
-axes[0,1].set_title("Confusion Matrix")
+plt.figure(figsize=(8, 6))
+cm_pivot = cm_df.pivot(index='label', columns='prediction', values='count')
+sns.heatmap(cm_pivot, annot=True, fmt='d', cmap='Blues')
+plt.title("Confusion Matrix", fontsize=14)
+plt.savefig(os.path.join(RES_DIR,"confusion_matrix.png"), dpi=300)
+plt.close()
 
 # 3. Feature Importance
-sns.barplot(data=imp_df, x="importance", y="feature", ax=axes[1,0])
-axes[1,0].set_title("Feature Importance")
+plt.figure(figsize=(10, 6))
+sns.barplot(data=imp_df.sort_values('importance'), x="importance", y="feature")
+plt.title("Feature Importance", fontsize=14)
+plt.savefig(os.path.join(RES_DIR,"feature_importance.png"), dpi=300)
+plt.close()
 
-# 4. NDVI vs Red scatter
-sns.scatterplot(data=csv_df.sample(10000), x="red_b4", y="ndvi", hue="label", alpha=0.6, ax=axes[1,1])
-axes[1,1].set_title("NDVI vs Red (B4)")
+# 4. NDVI vs Red
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=csv_df.sample(20000), x="red_b4", y="ndvi", 
+                hue="label_cat", alpha=0.6, s=15)
+plt.title("NDVI vs Red (B4)", fontsize=14)
+plt.savefig(os.path.join(RES_DIR,"ndvi_vs_red.png"), dpi=300)
+plt.close()
 
-plt.tight_layout()
-plt.savefig("crop_ml_results.png", dpi=300, bbox_inches='tight')
-plt.show()
+print("✅ 4 grafici salvati in file separati!")
 gc.collect()
 
 # %%

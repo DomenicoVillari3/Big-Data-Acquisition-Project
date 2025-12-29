@@ -1,0 +1,40 @@
+:: loading settings :: url = jar:file:/home/amministratore/miniconda3/envs/spark_env/lib/python3.8/site-packages/pyspark/jars/ivy-2.5.1.jar!/org/apache/ivy/core/settings/ivysettings.xml
+📡 Client: 192.168.128.236 → Master: 192.168.128.236
+📡 Il mio IP Client (Driver) è: 192.168.128.236
+🎯 Mi connetto al Master su: 192.168.128.236
+🚀 Tentativo di connessione al Cluster...
+
+✅ SUCCESS! Connesso al Cluster.
+🔗 Master: spark://192.168.128.236:7077
+ Web UI (Locale): http://192.168.128.236:4040
+ Web UI (Master): http://192.168.128.236:8080
+🧪 Test di calcolo distribuito: 100 righe contate in 6.675403833389282 secondi.
+✅ Spark pronto!
+📊 444,875,391 total pixel | Crop pixels: 20.0%
+
+🎯 AUC-ROC: 0.6053 | F1: 0.5708
+
+🌿 Feature Importance:
+     feature  importance
+0    Red(B4)    0.283893
+1    NIR(B8)    0.332348
+2  SWIR(B11)    0.292587
+3       NDVI    0.051651
+4       NDWI    0.020467
+5       NDMI    0.019054
+✅ 4 grafici salvati in file separati!
+
+⏱️  TEMPI ESECUZIONE:
+   Caricamento:    13.7s
+   Bilanciamento:  53.1s
+   Training:       1071.8s
+   Valutazione:    253.0s
+   ❌ TOTALE:      1391.6s (23.2min)
+
+🏁 COMPLETATO!
+📁 File generati:
+   crop_features_balanced.csv
+   confusion_matrix.csv
+   feature_importance.csv
+   crop_ml_results.png
+💾 Modello su MinIO!
