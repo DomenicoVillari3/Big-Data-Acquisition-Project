@@ -8,27 +8,27 @@
 🔗 Master: spark://192.168.128.236:7077
  Web UI (Locale): http://192.168.128.236:4040
  Web UI (Master): http://192.168.128.236:8080
-🧪 Test di calcolo distribuito: 100 righe contate in 6.56629204750061 secondi.
+🧪 Test di calcolo distribuito: 100 righe contate in 6.480950832366943 secondi.
 ✅ Spark pronto!
 📊 444,875,391 total pixel | Crop pixels: 20.0%
  Bilanciamento: Crop pixels: 8,920,368 | Non-Crop pixels: 8,889,733
 
-🎯 AUC-ROC: 0.6035 | F1: 0.5695
+🎯 AUC-ROC: 0.6034 | F1: 0.5697
 
 🌿 Feature Importance:
     feature  importance
-0    red_b4    0.315096
-1    nir_b8    0.299380
-2  swir_b11    0.333216
-3      ndvi    0.052308
+0    red_b4    0.306457
+1    nir_b8    0.310536
+2  swir_b11    0.332117
+3      ndvi    0.050889
 ✅ 4 grafici salvati in file separati!
 
 ⏱️  TEMPI ESECUZIONE:
-   Caricamento:    14.1s
-   Bilanciamento:  58.6s
-   Training:       691.1s
-   Valutazione:    239.7s
-   ❌ TOTALE:      1003.5s (16.7min)
+   Caricamento:    13.7s
+   Bilanciamento:  58.5s
+   Training:       595.2s
+   Valutazione:    238.0s
+   ❌ TOTALE:      905.4s (15.1min)
 
 🏁 COMPLETATO!
 📁 File generati:
