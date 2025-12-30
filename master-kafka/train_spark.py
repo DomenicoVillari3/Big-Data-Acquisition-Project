@@ -37,7 +37,7 @@ MINIO_ENDPOINT = f"http://{MASTER_IP}:9000"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 
-RES_DIR = "/home/amministratore/Scrivania/Big Data Acquisition/progetto mimmo/Big-Data-Acquisition-Project/master-kafka/results"
+RES_DIR = "/home/amministratore/Scrivania/Big Data Acquisition/progetto mimmo/Big-Data-Acquisition-Project/master-kafka/results3"
 os.makedirs(RES_DIR, exist_ok=True)
 
 def get_local_ip(target_ip):
@@ -87,6 +87,9 @@ except Exception:
 conf = SparkConf()
 conf.setAppName("SatStream-Distributed-Client")
 conf.setMaster(f"spark://{MASTER_IP}:7077")
+
+# 🔥 RAM OTTIMALE PER OGNI WORKER
+conf.set("spark.executor.memory", "10g")           # 75% worker 16GB
 
 # CONFIGURAZIONE RETE FONDAMENTALE
 # Il Driver (questo PC) deve essere raggiungibile dai Worker remoti
@@ -202,8 +205,8 @@ scaler = StandardScaler(
 rf = RandomForestClassifier(
     featuresCol="scaled_features",  # ← USA features scalate!
     labelCol="label",
-    numTrees=50,
-    maxDepth=10,  # ← Aumenta da 8
+    numTrees=80,
+    maxDepth=12,  # ← Aumenta da 8
     subsamplingRate=0.8,
     seed=42
 )
