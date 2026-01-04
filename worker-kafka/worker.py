@@ -104,65 +104,66 @@ class SatelliteDataWorkerBalanced:
 
 
     def get_sentinel_data(self, bbox):
-        """Scarica dati Sentinel-2 per il bbox"""
+        """
+        Scarica dati Sentinel-2 per il bbox.
+        MODIFICATO: Priorità alla stagione vegetativa (Peak Season) per coerenza ML.
+        """
 
-         # Aggiungi periodi stagionali
-        seasonal_periods = {
-            'winter': ("2023-01-01/2023-03-20", 20),   # (range, max_cloud)
-            'spring': ("2023-03-21/2023-06-20", 20),
-            'summer': ("2023-06-21/2023-09-22", 20),
-            'autumn': ("2023-09-23/2023-12-20", 20)
-        }
-        season_keys = list(seasonal_periods.keys())
-        season = random.choice(season_keys)
-
-
-        date_range, max_cloud = seasonal_periods[season]
-
-
-        try:
-            catalog = pystac_client.Client.open(
-                "https://earth-search.aws.element84.com/v1"
-            )
-            search = catalog.search(
-                collections=["sentinel-2-l2a"],
-                bbox=bbox,
-                datetime=date_range,
-                query={"eo:cloud_cover": {"lt": max_cloud}}
-            )
+        # Strategia: Cerca prima nel periodo di massima vegetazione (Maggio-Giugno in Spagna)
+        # Questo massimizza il contrasto tra CROP (Verde) e NON-CROP (Terra/Altro)
+        search_windows = [
+            # 1. GOLD STANDARD: Tarda primavera (Massimo NDVI per cereali/colture)
+            ("peak_spring", "2023-04-15/2023-06-15", 10), 
             
-            items = search.item_collection()
+            # 2. SILVER: Allarghiamo a inizio primavera (colture precoci)
+            ("early_spring", "2023-03-01/2023-04-14", 20),
+            
+            # 3. BRONZE: Inizio estate (colture irrigate)
+            ("early_summer", "2023-06-16/2023-07-30", 20),
+            
+            # 4. FALLBACK: Tutto l'anno (solo se disperati)
+            ("full_year", "2023-01-01/2023-12-31", 30)
+        ]
 
-            if not len(items):
-                logger.warning(f"No images for {season}, for bboc {bbox} trying all seasons...")
+        catalog = pystac_client.Client.open("https://earth-search.aws.element84.com/v1")
+        
+        selected_item = None
+        used_season = None
+
+        # Itera sulle finestre temporali in ordine di priorità
+        for season_name, date_range, max_cloud in search_windows:
+            try:
+                search = catalog.search(
+                    collections=["sentinel-2-l2a"],
+                    bbox=bbox,
+                    datetime=date_range,
+                    query={"eo:cloud_cover": {"lt": max_cloud}}
+                )
+                items = search.item_collection()
                 
-                # Prova tutte le stagioni con cloud cover incrementale
-                for fallback_season, (fallback_range, fallback_cloud) in seasonal_periods.items():
-                    search = catalog.search(
-                        collections=["sentinel-2-l2a"],
-                        bbox=bbox,
-                        datetime=fallback_range,
-                        query={"eo:cloud_cover": {"lt": fallback_cloud + 10}}
-                    )
-                    items = search.item_collection()
-                    if len(items):
-                        season = fallback_season
-                        logger.debug(f"  Using fallback: {season}")
-                        break
+                if len(items) > 0:
+                    # Trovato! Prendiamo l'immagine con meno nuvole in assoluto in questo periodo
+                    selected_item = min(items, key=lambda x: x.properties['eo:cloud_cover'])
+                    used_season = season_name
+                    break # Usciamo dal loop, abbiamo l'immagine migliore
+            except Exception as e:
+                logger.warning(f"Search error for {season_name}: {e}")
+                continue
 
-                    if not len(items):
-                        return None
-            
-            # Seleziona immagine con meno cloud
-            selected_item = min(items, key=lambda x: x.properties['eo:cloud_cover'])
-            
-            logger.info(
-                f"  Season: {season}, Date: {selected_item.datetime.date()}, "
-                f"Cloud: {selected_item.properties['eo:cloud_cover']:.1f}%"
-            )
-            
+        if selected_item is None:
+            logger.warning(f"❌ No valid images found for bbox {bbox} even after fallbacks.")
+            return None
+
+        # Log per debug ML (utile per capire se stiamo usando dati buoni)
+        logger.info(
+            f"  Using Image: {used_season} | Date: {selected_item.datetime.date()} | "
+            f"Cloud: {selected_item.properties['eo:cloud_cover']:.1f}%"
+        )
+
+        # Download effettivo con StackStac
+        try:
             data = stackstac.stack(
-                [items[0]],
+                [selected_item],
                 assets=self.assets,
                 bounds_latlon=bbox,
                 resolution=10,
@@ -174,10 +175,11 @@ class SatelliteDataWorkerBalanced:
             if data.sizes['time'] == 0:
                 return None
             
+            # Squeeze time dimension e calcola (download)
             return data.isel(time=0).astype("uint16").compute()
-            
+
         except Exception as e:
-            logger.error(f"Error downloading: {e}")
+            logger.error(f"Error downloading/computing raster: {e}")
             return None
     
     def save_npz_to_minio(self, img_np, mask_np, task_id, worker_id):
